@@ -6,8 +6,11 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 
 app.use(helmet());
+
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',').map(url => url.trim());
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: allowedOrigins,
   credentials: true,
 }));
 
