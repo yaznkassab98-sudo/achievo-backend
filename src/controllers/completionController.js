@@ -168,4 +168,13 @@ const getUserCompletions = async (req, res) => {
   res.json(rows);
 };
 
-module.exports = { submitCompletion, getPendingCompletions, getStaffPendingCompletions, confirmCompletion, rejectCompletion, getUserCompletions };
+const getUserProgress = async (req, res) => {
+  const { businessId } = req.params;
+  const { rows } = await query(
+    `SELECT challenge_id, status FROM completions WHERE user_id = $1 AND business_id = $2`,
+    [req.user.id, businessId]
+  );
+  res.json(rows);
+};
+
+module.exports = { submitCompletion, getPendingCompletions, getStaffPendingCompletions, confirmCompletion, rejectCompletion, getUserCompletions, getUserProgress };

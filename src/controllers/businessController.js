@@ -164,6 +164,33 @@ const updateBusiness = async (req, res) => {
   res.json(rows[0]);
 };
 
+const getBusinessStats = async (req, res) => {
+  const { id } = req.params;
+  const { rows: owned } = await query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [id, req.user.id]);
+  if (!owned.length) return res.status(403).json({ error: 'Forbidden' });
+
+  const { rows: daily } = await query(
+    `SELECT TO_CHAR(created_at AT TIME ZONE 'UTC', 'Mon DD') as day,
+            DATE(created_at AT TIME ZONE 'UTC') as date,
+            COUNT(*) as count
+     FROM completions
+     WHERE business_id = $1 AND status IN ('confirmed','claimed') AND created_at > NOW() - INTERVAL '30 days'
+     GROUP BY day, date
+     ORDER BY date ASC`,
+    [id]
+  );
+
+  const { rows: totals } = await query(
+    `SELECT COUNT(*) as total_completions,
+            COALESCE(SUM(points_earned), 0) as total_points,
+            COUNT(DISTINCT user_id) as unique_customers
+     FROM completions WHERE business_id = $1 AND status IN ('confirmed','claimed')`,
+    [id]
+  );
+
+  res.json({ daily, ...totals[0] });
+};
+
 const getQRCode = async (req, res) => {
   const { id } = req.params;
   const { rows } = await query('SELECT slug, qr_code_url FROM businesses WHERE id = $1', [id]);
@@ -177,4 +204,4 @@ const getQRCode = async (req, res) => {
   res.json({ qrCodeUrl });
 };
 
-module.exports = { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode };
+module.exports = { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode, getBusinessStats };
