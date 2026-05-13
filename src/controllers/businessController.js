@@ -87,6 +87,7 @@ const getBusinessesByCity = async (req, res) => {
 
   let sql = `
     SELECT b.id, b.name, b.slug, b.description, b.category, b.address, b.logo_url,
+           ci.name as city_name, ci.country,
            COUNT(c.id) as challenge_count
     FROM businesses b
     JOIN cities ci ON ci.id = b.city_id AND ci.slug = $1
@@ -104,7 +105,36 @@ const getBusinessesByCity = async (req, res) => {
     sql += ` AND b.name ILIKE $${params.length}`;
   }
 
-  sql += ' GROUP BY b.id ORDER BY challenge_count DESC, b.created_at DESC';
+  sql += ' GROUP BY b.id, ci.name, ci.country ORDER BY challenge_count DESC, b.created_at DESC';
+
+  const { rows } = await query(sql, params);
+  res.json(rows);
+};
+
+const getAllBusinesses = async (req, res) => {
+  const { category, search } = req.query;
+
+  let sql = `
+    SELECT b.id, b.name, b.slug, b.description, b.category, b.address, b.logo_url,
+           ci.name as city_name, ci.country,
+           COUNT(c.id) as challenge_count
+    FROM businesses b
+    JOIN cities ci ON ci.id = b.city_id
+    LEFT JOIN challenges c ON c.business_id = b.id AND c.is_active = true
+    WHERE b.is_active = true
+  `;
+  const params = [];
+
+  if (category) {
+    params.push(category);
+    sql += ` AND b.category = $${params.length}`;
+  }
+  if (search) {
+    params.push(`%${search}%`);
+    sql += ` AND (b.name ILIKE $${params.length} OR ci.name ILIKE $${params.length})`;
+  }
+
+  sql += ' GROUP BY b.id, ci.name, ci.country ORDER BY challenge_count DESC, b.created_at DESC LIMIT 100';
 
   const { rows } = await query(sql, params);
   res.json(rows);
@@ -147,4 +177,4 @@ const getQRCode = async (req, res) => {
   res.json({ qrCodeUrl });
 };
 
-module.exports = { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, updateBusiness, getQRCode };
+module.exports = { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode };

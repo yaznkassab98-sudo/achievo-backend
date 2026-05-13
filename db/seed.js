@@ -6,12 +6,46 @@ const { v4: uuidv4 } = require('uuid');
 async function seed() {
   console.log('Seeding database...');
 
+  const cityData = [
+    ['Istanbul',      'Turkey',       'istanbul'],
+    ['Ankara',        'Turkey',       'ankara'],
+    ['London',        'UK',           'london'],
+    ['Manchester',    'UK',           'manchester'],
+    ['New York',      'USA',          'new-york'],
+    ['Los Angeles',   'USA',          'los-angeles'],
+    ['Chicago',       'USA',          'chicago'],
+    ['Miami',         'USA',          'miami'],
+    ['Toronto',       'Canada',       'toronto'],
+    ['Vancouver',     'Canada',       'vancouver'],
+    ['Paris',         'France',       'paris'],
+    ['Berlin',        'Germany',      'berlin'],
+    ['Amsterdam',     'Netherlands',  'amsterdam'],
+    ['Barcelona',     'Spain',        'barcelona'],
+    ['Madrid',        'Spain',        'madrid'],
+    ['Rome',          'Italy',        'rome'],
+    ['Dubai',         'UAE',          'dubai'],
+    ['Abu Dhabi',     'UAE',          'abu-dhabi'],
+    ['Riyadh',        'Saudi Arabia', 'riyadh'],
+    ['Singapore',     'Singapore',    'singapore'],
+    ['Tokyo',         'Japan',        'tokyo'],
+    ['Seoul',         'South Korea',  'seoul'],
+    ['Bangkok',       'Thailand',     'bangkok'],
+    ['Mumbai',        'India',        'mumbai'],
+    ['Delhi',         'India',        'delhi'],
+    ['Sydney',        'Australia',    'sydney'],
+    ['Melbourne',     'Australia',    'melbourne'],
+    ['São Paulo',     'Brazil',       'sao-paulo'],
+    ['Mexico City',   'Mexico',       'mexico-city'],
+  ]
+  const cityValues = cityData.map(() => `(${Array(3).fill(0).map((_, j) => `$${cityData.indexOf(cityData.find((_, ii) => ii === cityData.length)) * 3 + j + 1}`).join(', ')})`).join(', ')
+  const cityParams = cityData.flatMap(c => [uuidv4(), c[0], c[1], c[2]])
+  const cityPlaceholders = cityData.map((_, i) => `($${i*4+1}, $${i*4+2}, $${i*4+3}, $${i*4+4}, true)`).join(',\n    ')
+
   await query(`
     INSERT INTO cities (id, name, country, slug, is_active) VALUES
-    ($1, 'Istanbul', 'Turkey', 'istanbul', true),
-    ($2, 'Ankara', 'Turkey', 'ankara', true)
+    ${cityPlaceholders}
     ON CONFLICT (slug) DO NOTHING
-  `, [uuidv4(), uuidv4()]);
+  `, cityParams);
 
   const { rows: cityRows } = await query(`SELECT id, slug FROM cities WHERE slug IN ('istanbul', 'ankara')`);
   const istanbulId = cityRows.find(c => c.slug === 'istanbul').id;
