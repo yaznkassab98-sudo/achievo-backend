@@ -10,7 +10,7 @@ const getStaff = async (req, res) => {
   if (!owned.length) return res.status(403).json({ error: 'Forbidden' });
 
   const { rows } = await query(
-    'SELECT id, name, role, pin_code, is_active, created_at FROM staff WHERE business_id = $1 ORDER BY created_at',
+    'SELECT id, name, role, pin_code, is_active, created_at FROM staff WHERE business_id = $1 AND is_active = true ORDER BY created_at',
     [businessId]
   );
   res.json(rows);

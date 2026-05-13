@@ -28,7 +28,7 @@ const createBusiness = async (req, res) => {
     [subId, businessId]
   );
 
-  const frontendUrl = process.env.FRONTEND_URL || 'https://achievo.app';
+  const frontendUrl = (process.env.FRONTEND_URL || 'https://achievo.app').split(',').find(u => !u.includes('localhost')) || process.env.FRONTEND_URL || 'https://achievo.app';
   const qrData = `${frontendUrl}/b/${slug}`;
   const qrCodeUrl = await QRCode.toDataURL(qrData);
 
@@ -141,7 +141,7 @@ const getQRCode = async (req, res) => {
 
   if (rows[0].qr_code_url) return res.json({ qrCodeUrl: rows[0].qr_code_url });
 
-  const frontendUrl = process.env.FRONTEND_URL || 'https://achievo.app';
+  const frontendUrl = (process.env.FRONTEND_URL || 'https://achievo.app').split(',').find(u => !u.includes('localhost')) || process.env.FRONTEND_URL || 'https://achievo.app';
   const qrCodeUrl = await QRCode.toDataURL(`${frontendUrl}/b/${rows[0].slug}`);
   await query('UPDATE businesses SET qr_code_url = $1 WHERE id = $2', [qrCodeUrl, id]);
   res.json({ qrCodeUrl });

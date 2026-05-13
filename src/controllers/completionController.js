@@ -67,6 +67,20 @@ const getPendingCompletions = async (req, res) => {
   res.json(rows);
 };
 
+const getStaffPendingCompletions = async (req, res) => {
+  const { businessId } = req.params;
+  const { rows } = await query(
+    `SELECT co.*, u.full_name, u.email, u.avatar_url, ch.title as challenge_title, ch.reward_title
+     FROM completions co
+     JOIN users u ON u.id = co.user_id
+     JOIN challenges ch ON ch.id = co.challenge_id
+     WHERE co.business_id = $1 AND co.status = 'pending'
+     ORDER BY co.created_at ASC`,
+    [businessId]
+  );
+  res.json(rows);
+};
+
 const confirmCompletion = async (req, res) => {
   const { id } = req.params;
   const { pin } = req.body;
@@ -154,4 +168,4 @@ const getUserCompletions = async (req, res) => {
   res.json(rows);
 };
 
-module.exports = { submitCompletion, getPendingCompletions, confirmCompletion, rejectCompletion, getUserCompletions };
+module.exports = { submitCompletion, getPendingCompletions, getStaffPendingCompletions, confirmCompletion, rejectCompletion, getUserCompletions };
