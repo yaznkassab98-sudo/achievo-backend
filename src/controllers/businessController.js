@@ -247,6 +247,108 @@ const getQRCode = async (req, res) => {
   res.json({ qrCodeUrl });
 };
 
+const getBusinessAnalytics = async (req, res) => {
+  const { id } = req.params;
+  const { rows: owned } = await query('SELECT id, category FROM businesses WHERE id = $1 AND owner_id = $2', [id, req.user.id]);
+  if (!owned.length) return res.status(403).json({ error: 'Forbidden' });
+  const category = owned[0].category;
+
+  const [weekly, dayOfWeek, challengePerf, customers, newVsReturning, atRisk, benchmark] = await Promise.all([
+
+    query(`
+      SELECT DATE_TRUNC('week', updated_at AT TIME ZONE 'UTC') as week, COUNT(*) as count
+      FROM completions
+      WHERE business_id = $1 AND status IN ('confirmed','claimed') AND updated_at > NOW() - INTERVAL '8 weeks'
+      GROUP BY week ORDER BY week ASC`, [id]),
+
+    query(`
+      SELECT EXTRACT(DOW FROM updated_at AT TIME ZONE 'UTC') as dow,
+             TO_CHAR(updated_at AT TIME ZONE 'UTC', 'Dy') as day_name,
+             COUNT(*) as count
+      FROM completions
+      WHERE business_id = $1 AND status IN ('confirmed','claimed')
+      GROUP BY dow, day_name ORDER BY dow ASC`, [id]),
+
+    query(`
+      SELECT c.id, c.title, c.type, c.reward_title, c.points_value, c.is_active,
+             COUNT(co.id) as total_completions,
+             COUNT(DISTINCT co.user_id) as unique_customers
+      FROM challenges c
+      LEFT JOIN completions co ON co.challenge_id = c.id AND co.status IN ('confirmed','claimed')
+      WHERE c.business_id = $1
+      GROUP BY c.id ORDER BY total_completions DESC`, [id]),
+
+    query(`
+      SELECT u.id, u.full_name, u.avatar_url,
+             COUNT(co.id) as total_completions,
+             MAX(co.updated_at) as last_seen,
+             COALESCE(SUM(co.points_earned), 0) as points_earned
+      FROM completions co
+      JOIN users u ON u.id = co.user_id
+      WHERE co.business_id = $1 AND co.status IN ('confirmed','claimed')
+      GROUP BY u.id, u.full_name, u.avatar_url
+      ORDER BY last_seen DESC`, [id]),
+
+    query(`
+      SELECT
+        SUM(CASE WHEN first_visit >= DATE_TRUNC('month', NOW()) THEN 1 ELSE 0 END) as new_customers,
+        SUM(CASE WHEN first_visit < DATE_TRUNC('month', NOW()) AND last_visit >= DATE_TRUNC('month', NOW()) THEN 1 ELSE 0 END) as returning_customers
+      FROM (
+        SELECT user_id, MIN(updated_at) as first_visit, MAX(updated_at) as last_visit
+        FROM completions WHERE business_id = $1 AND status IN ('confirmed','claimed')
+        GROUP BY user_id
+      ) sub`, [id]),
+
+    query(`
+      SELECT u.id, u.full_name, u.avatar_url,
+             COUNT(co.id) as total_completions,
+             MAX(co.updated_at) as last_seen,
+             EXTRACT(DAY FROM NOW() - MAX(co.updated_at)) as days_away
+      FROM completions co
+      JOIN users u ON u.id = co.user_id
+      WHERE co.business_id = $1 AND co.status IN ('confirmed','claimed')
+      GROUP BY u.id, u.full_name, u.avatar_url
+      HAVING MAX(co.updated_at) < NOW() - INTERVAL '21 days'
+      ORDER BY MAX(co.updated_at) ASC LIMIT 10`, [id]),
+
+    query(`
+      WITH my_stats AS (
+        SELECT CASE WHEN COUNT(DISTINCT user_id) > 0
+          THEN ROUND(COUNT(*)::numeric / COUNT(DISTINCT user_id), 1) ELSE 0 END as my_avg
+        FROM completions WHERE business_id = $1 AND status IN ('confirmed','claimed')
+      ),
+      cat_stats AS (
+        SELECT b.id,
+          CASE WHEN COUNT(DISTINCT co.user_id) > 0
+            THEN COUNT(co.id)::numeric / COUNT(DISTINCT co.user_id) ELSE 0 END as biz_avg
+        FROM businesses b
+        LEFT JOIN completions co ON co.business_id = b.id AND co.status IN ('confirmed','claimed')
+        WHERE b.is_active = true AND b.category = $2
+        GROUP BY b.id
+      )
+      SELECT
+        (SELECT my_avg FROM my_stats) as my_avg,
+        ROUND(AVG(biz_avg), 1) as category_avg,
+        ROUND(PERCENTILE_CONT(0.8) WITHIN GROUP (ORDER BY biz_avg), 1) as top_avg
+      FROM cat_stats`, [id, category]),
+  ]);
+
+  const thisWeek = weekly.rows[weekly.rows.length - 1]?.count || 0;
+  const lastWeek = weekly.rows[weekly.rows.length - 2]?.count || 0;
+  const weekChange = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : null;
+
+  res.json({
+    weekly: weekly.rows,
+    weekChange,
+    dayOfWeek: dayOfWeek.rows,
+    challengePerf: challengePerf.rows,
+    customers: customers.rows,
+    newVsReturning: newVsReturning.rows[0],
+    atRisk: atRisk.rows,
+    benchmark: benchmark.rows[0],
+  });
+};
+
 const getBusinessLeaderboard = async (req, res) => {
   const { id } = req.params;
   const { rows } = await query(
@@ -264,4 +366,4 @@ const getBusinessLeaderboard = async (req, res) => {
   res.json(rows);
 };
 
-module.exports = { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode, getBusinessStats, getBusinessLeaderboard };
+module.exports = { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode, getBusinessStats, getBusinessAnalytics, getBusinessLeaderboard };
