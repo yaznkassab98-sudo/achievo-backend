@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const { query, getClient } = require('../lib/db');
 const { sendRewardConfirmedEmail } = require('../lib/email');
 const { checkAndAward } = require('../lib/achievements');
+const { checkAndPayReferralBonus } = require('./referralController');
 
 const submitCompletion = async (req, res) => {
   const { challengeId } = req.body;
@@ -133,6 +134,7 @@ const confirmCompletion = async (req, res) => {
     await client.query('COMMIT');
 
     checkAndAward(comp[0].user_id, comp[0].business_id).catch(() => {});
+    checkAndPayReferralBonus(comp[0].user_id).catch(() => {});
 
     try {
       await sendRewardConfirmedEmail(

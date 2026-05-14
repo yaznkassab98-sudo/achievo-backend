@@ -69,7 +69,9 @@ const getBusinessBySlug = async (req, res) => {
   const { slug } = req.params;
   const { rows } = await query(
     `SELECT b.id, b.name, b.slug, b.description, b.category, b.address, b.phone, b.website,
-            b.google_maps_url, b.logo_url, b.cover_url, c.name as city_name, c.slug as city_slug
+            b.google_maps_url, b.logo_url, b.cover_url, c.name as city_name, c.slug as city_slug,
+            (SELECT COUNT(*) FROM completions co JOIN challenges ch ON ch.id = co.challenge_id WHERE ch.business_id = b.id AND co.status IN ('confirmed','claimed') AND co.updated_at > NOW() - INTERVAL '7 days') as weekly_completions,
+            (SELECT COUNT(*) FROM completions co JOIN challenges ch ON ch.id = co.challenge_id WHERE ch.business_id = b.id AND co.status IN ('confirmed','claimed')) as total_completions
      FROM businesses b
      JOIN cities c ON c.id = b.city_id
      WHERE b.slug = $1 AND b.is_active = true`,
@@ -98,7 +100,11 @@ const getBusinessesByCity = async (req, res) => {
            b.latitude, b.longitude,
            ci.name as city_name, ci.slug as city_slug, ci.country,
            COUNT(c.id) as challenge_count,
-           COALESCE(SUM(c.points_value), 0) as total_points
+           COALESCE(SUM(c.points_value), 0) as total_points,
+           (SELECT reward_title FROM challenges WHERE business_id = b.id AND is_active = true ORDER BY points_value DESC LIMIT 1) as best_reward_title,
+           (SELECT points_value FROM challenges WHERE business_id = b.id AND is_active = true ORDER BY points_value DESC LIMIT 1) as best_reward_points,
+           (SELECT COUNT(*) FROM completions co JOIN challenges ch ON ch.id = co.challenge_id WHERE ch.business_id = b.id AND co.status IN ('confirmed','claimed') AND co.updated_at > NOW() - INTERVAL '7 days') as weekly_completions,
+           (SELECT COUNT(*) FROM completions co JOIN challenges ch ON ch.id = co.challenge_id WHERE ch.business_id = b.id AND co.status IN ('confirmed','claimed')) as total_completions
     FROM businesses b
     JOIN cities ci ON ci.id = b.city_id AND ci.slug = $1
     LEFT JOIN challenges c ON c.business_id = b.id AND c.is_active = true
@@ -129,7 +135,11 @@ const getAllBusinesses = async (req, res) => {
            b.latitude, b.longitude,
            ci.name as city_name, ci.slug as city_slug, ci.country,
            COUNT(c.id) as challenge_count,
-           COALESCE(SUM(c.points_value), 0) as total_points
+           COALESCE(SUM(c.points_value), 0) as total_points,
+           (SELECT reward_title FROM challenges WHERE business_id = b.id AND is_active = true ORDER BY points_value DESC LIMIT 1) as best_reward_title,
+           (SELECT points_value FROM challenges WHERE business_id = b.id AND is_active = true ORDER BY points_value DESC LIMIT 1) as best_reward_points,
+           (SELECT COUNT(*) FROM completions co JOIN challenges ch ON ch.id = co.challenge_id WHERE ch.business_id = b.id AND co.status IN ('confirmed','claimed') AND co.updated_at > NOW() - INTERVAL '7 days') as weekly_completions,
+           (SELECT COUNT(*) FROM completions co JOIN challenges ch ON ch.id = co.challenge_id WHERE ch.business_id = b.id AND co.status IN ('confirmed','claimed')) as total_completions
     FROM businesses b
     JOIN cities ci ON ci.id = b.city_id
     LEFT JOIN challenges c ON c.business_id = b.id AND c.is_active = true

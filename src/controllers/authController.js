@@ -12,8 +12,13 @@ const signRefreshToken = (userId) =>
 
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString()
 
+const generateReferralCode = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
+
 const signup = async (req, res) => {
-  const { email, password, fullName, role, cityId, phone, avatarUrl } = req.body
+  const { email, password, fullName, role, cityId, phone, avatarUrl, referralCode } = req.body
 
   if (!email || !password || !fullName || !role)
     return res.status(400).json({ error: 'email, password, fullName, and role are required' })
@@ -28,13 +33,22 @@ const signup = async (req, res) => {
   if (existing.rows.length)
     return res.status(409).json({ error: 'Email already registered' })
 
+  let referredById = null
+  if (referralCode) {
+    const { rows: refRows } = await query('SELECT id FROM users WHERE referral_code = $1', [referralCode.toUpperCase()])
+    if (refRows.length) referredById = refRows[0].id
+  }
+
   const passwordHash = await bcrypt.hash(password, 12)
   const userId = uuidv4()
+  let myReferralCode = generateReferralCode()
+  const codeConflict = await query('SELECT id FROM users WHERE referral_code = $1', [myReferralCode])
+  if (codeConflict.rows.length) myReferralCode = generateReferralCode()
 
   await query(
-    `INSERT INTO users (id, email, password_hash, full_name, role, city_id, phone, avatar_url, is_verified)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)`,
-    [userId, email.toLowerCase(), passwordHash, fullName, role, cityId || null, phone || null, avatarUrl || null]
+    `INSERT INTO users (id, email, password_hash, full_name, role, city_id, phone, avatar_url, is_verified, referral_code, referred_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, $10)`,
+    [userId, email.toLowerCase(), passwordHash, fullName, role, cityId || null, phone || null, avatarUrl || null, myReferralCode, referredById]
   )
 
   const code = generateOtp()

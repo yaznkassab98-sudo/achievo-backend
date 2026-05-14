@@ -30,6 +30,7 @@ app.use('/api/completions', require('./routes/completions'));
 app.use('/api/rewards', require('./routes/rewards'));
 app.use('/api/staff', require('./routes/staff'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/referrals', require('./routes/referrals'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
