@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const { query } = require('../lib/db');
+const { geocodeAddress } = require('../lib/geocode');
 
 const slugify = (text) =>
   text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -32,12 +33,19 @@ const createBusiness = async (req, res) => {
   const qrData = `${frontendUrl}/b/${slug}`;
   const qrCodeUrl = await QRCode.toDataURL(qrData);
 
+  let lat = null, lng = null;
+  if (address) {
+    const { rows: cityRows } = await query('SELECT name, country FROM cities WHERE id = $1', [cityId]);
+    const coords = await geocodeAddress(address, cityRows[0]?.name, cityRows[0]?.country);
+    if (coords) { lat = coords.lat; lng = coords.lng; }
+  }
+
   const { rows } = await query(
-    `INSERT INTO businesses (id, name, slug, description, city_id, category, address, phone, website, google_maps_url, qr_code_url, owner_id, subscription_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+    `INSERT INTO businesses (id, name, slug, description, city_id, category, address, phone, website, google_maps_url, qr_code_url, owner_id, subscription_id, latitude, longitude)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      RETURNING *`,
     [businessId, name, slug, description || null, cityId, category || 'other', address || null,
-     phone || null, website || null, googleMapsUrl || null, qrCodeUrl, req.user.id, subId]
+     phone || null, website || null, googleMapsUrl || null, qrCodeUrl, req.user.id, subId, lat, lng]
   );
 
   await query('UPDATE subscriptions SET business_id = $1 WHERE id = $2', [businessId, subId]);
@@ -87,7 +95,8 @@ const getBusinessesByCity = async (req, res) => {
 
   let sql = `
     SELECT b.id, b.name, b.slug, b.description, b.category, b.address, b.logo_url,
-           ci.name as city_name, ci.country,
+           b.latitude, b.longitude,
+           ci.name as city_name, ci.slug as city_slug, ci.country,
            COUNT(c.id) as challenge_count
     FROM businesses b
     JOIN cities ci ON ci.id = b.city_id AND ci.slug = $1
@@ -105,18 +114,19 @@ const getBusinessesByCity = async (req, res) => {
     sql += ` AND b.name ILIKE $${params.length}`;
   }
 
-  sql += ' GROUP BY b.id, ci.name, ci.country ORDER BY challenge_count DESC, b.created_at DESC';
+  sql += ' GROUP BY b.id, ci.name, ci.slug, ci.country ORDER BY challenge_count DESC, b.created_at DESC';
 
   const { rows } = await query(sql, params);
   res.json(rows);
 };
 
 const getAllBusinesses = async (req, res) => {
-  const { category, search } = req.query;
+  const { category, search, country } = req.query;
 
   let sql = `
     SELECT b.id, b.name, b.slug, b.description, b.category, b.address, b.logo_url,
-           ci.name as city_name, ci.country,
+           b.latitude, b.longitude,
+           ci.name as city_name, ci.slug as city_slug, ci.country,
            COUNT(c.id) as challenge_count
     FROM businesses b
     JOIN cities ci ON ci.id = b.city_id
@@ -133,8 +143,12 @@ const getAllBusinesses = async (req, res) => {
     params.push(`%${search}%`);
     sql += ` AND (b.name ILIKE $${params.length} OR ci.name ILIKE $${params.length})`;
   }
+  if (country) {
+    params.push(country);
+    sql += ` AND ci.country = $${params.length}`;
+  }
 
-  sql += ' GROUP BY b.id, ci.name, ci.country ORDER BY challenge_count DESC, b.created_at DESC LIMIT 100';
+  sql += ' GROUP BY b.id, ci.name, ci.slug, ci.country ORDER BY challenge_count DESC, b.created_at DESC LIMIT 500';
 
   const { rows } = await query(sql, params);
   res.json(rows);
@@ -144,8 +158,24 @@ const updateBusiness = async (req, res) => {
   const { id } = req.params;
   const { name, description, category, address, phone, website, googleMapsUrl, logoUrl, coverUrl } = req.body;
 
-  const { rows: owned } = await query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [id, req.user.id]);
+  const { rows: owned } = await query(
+    'SELECT b.id, b.address FROM businesses b WHERE b.id = $1 AND b.owner_id = $2',
+    [id, req.user.id]
+  );
   if (!owned.length) return res.status(403).json({ error: 'Forbidden' });
+
+  let latUpdate = '', latParams = [];
+  if (address && address !== owned[0].address) {
+    const { rows: bizCity } = await query(
+      'SELECT ci.name, ci.country FROM businesses b JOIN cities ci ON ci.id = b.city_id WHERE b.id = $1',
+      [id]
+    );
+    const coords = await geocodeAddress(address, bizCity[0]?.name, bizCity[0]?.country);
+    if (coords) {
+      latUpdate = ', latitude = $11, longitude = $12';
+      latParams = [coords.lat, coords.lng];
+    }
+  }
 
   const { rows } = await query(
     `UPDATE businesses SET
@@ -158,8 +188,9 @@ const updateBusiness = async (req, res) => {
        google_maps_url = COALESCE($7, google_maps_url),
        logo_url = COALESCE($8, logo_url),
        cover_url = COALESCE($9, cover_url)
+       ${latUpdate}
      WHERE id = $10 RETURNING *`,
-    [name, description, category, address, phone, website, googleMapsUrl, logoUrl, coverUrl, id]
+    [name, description, category, address, phone, website, googleMapsUrl, logoUrl, coverUrl, id, ...latParams]
   );
   res.json(rows[0]);
 };
