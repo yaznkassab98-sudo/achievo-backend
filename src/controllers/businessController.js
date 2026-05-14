@@ -97,7 +97,8 @@ const getBusinessesByCity = async (req, res) => {
     SELECT b.id, b.name, b.slug, b.description, b.category, b.address, b.logo_url,
            b.latitude, b.longitude,
            ci.name as city_name, ci.slug as city_slug, ci.country,
-           COUNT(c.id) as challenge_count
+           COUNT(c.id) as challenge_count,
+           COALESCE(SUM(c.points_value), 0) as total_points
     FROM businesses b
     JOIN cities ci ON ci.id = b.city_id AND ci.slug = $1
     LEFT JOIN challenges c ON c.business_id = b.id AND c.is_active = true
@@ -127,7 +128,8 @@ const getAllBusinesses = async (req, res) => {
     SELECT b.id, b.name, b.slug, b.description, b.category, b.address, b.logo_url,
            b.latitude, b.longitude,
            ci.name as city_name, ci.slug as city_slug, ci.country,
-           COUNT(c.id) as challenge_count
+           COUNT(c.id) as challenge_count,
+           COALESCE(SUM(c.points_value), 0) as total_points
     FROM businesses b
     JOIN cities ci ON ci.id = b.city_id
     LEFT JOIN challenges c ON c.business_id = b.id AND c.is_active = true
