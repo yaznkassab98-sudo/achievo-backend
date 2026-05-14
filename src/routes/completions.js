@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { submitCompletion, getPendingCompletions, getStaffPendingCompletions, confirmCompletion, rejectCompletion, getUserCompletions, getUserProgress } = require('../controllers/completionController');
+const { submitCompletion, getPendingCompletions, getStaffPendingCompletions, confirmCompletion, rejectCompletion, getUserCompletions, getUserProgress, getUserAchievements } = require('../controllers/completionController');
 const { authenticate, requireRole } = require('../middleware/auth');
 
 router.post('/', authenticate, requireRole('customer'), submitCompletion);
@@ -9,5 +9,6 @@ router.put('/:id/confirm', confirmCompletion);
 router.put('/:id/reject', rejectCompletion);
 router.get('/mine', authenticate, getUserCompletions);
 router.get('/progress/:businessId', authenticate, getUserProgress);
+router.get('/achievements', authenticate, getUserAchievements);
 
 module.exports = router;

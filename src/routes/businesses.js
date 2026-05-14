@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode, getBusinessStats } = require('../controllers/businessController');
+const { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode, getBusinessStats, getBusinessLeaderboard } = require('../controllers/businessController');
 const { authenticate, requireRole } = require('../middleware/auth');
 
 router.get('/', getAllBusinesses);
@@ -8,6 +8,7 @@ router.get('/slug/:slug', getBusinessBySlug);
 router.get('/mine', authenticate, requireRole('business_owner'), getMyBusiness);
 router.get('/:id/qr', authenticate, requireRole('business_owner'), getQRCode);
 router.get('/:id/stats', authenticate, requireRole('business_owner'), getBusinessStats);
+router.get('/:id/leaderboard', getBusinessLeaderboard);
 router.post('/', authenticate, requireRole('business_owner'), createBusiness);
 router.put('/:id', authenticate, requireRole('business_owner'), updateBusiness);
 

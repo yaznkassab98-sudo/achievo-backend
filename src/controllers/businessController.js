@@ -235,4 +235,21 @@ const getQRCode = async (req, res) => {
   res.json({ qrCodeUrl });
 };
 
-module.exports = { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode, getBusinessStats };
+const getBusinessLeaderboard = async (req, res) => {
+  const { id } = req.params;
+  const { rows } = await query(
+    `SELECT u.id, u.full_name, u.avatar_url,
+            COALESCE(SUM(co.points_earned), 0) as total_points,
+            COUNT(*) as completions
+     FROM completions co
+     JOIN users u ON u.id = co.user_id
+     WHERE co.business_id = $1 AND co.status IN ('confirmed','claimed')
+     GROUP BY u.id, u.full_name, u.avatar_url
+     ORDER BY total_points DESC, completions DESC
+     LIMIT 10`,
+    [id]
+  );
+  res.json(rows);
+};
+
+module.exports = { createBusiness, getMyBusiness, getBusinessBySlug, getBusinessesByCity, getAllBusinesses, updateBusiness, getQRCode, getBusinessStats, getBusinessLeaderboard };
