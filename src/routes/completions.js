@@ -6,7 +6,7 @@ router.post('/', authenticate, requireRole('customer'), submitCompletion);
 router.get('/pending/:businessId', authenticate, requireRole('business_owner'), getPendingCompletions);
 router.get('/staff-pending/:businessId', getStaffPendingCompletions);
 router.put('/:id/confirm', confirmCompletion);
-router.put('/:id/reject', authenticate, requireRole('business_owner'), rejectCompletion);
+router.put('/:id/reject', rejectCompletion);
 router.get('/mine', authenticate, getUserCompletions);
 router.get('/progress/:businessId', authenticate, getUserProgress);
 

@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { query, getClient } = require('../lib/db');
+const { sendRewardConfirmedEmail } = require('../lib/email');
 
 const submitCompletion = async (req, res) => {
   const { challengeId } = req.body;
@@ -88,8 +89,12 @@ const confirmCompletion = async (req, res) => {
   if (!pin) return res.status(400).json({ error: 'PIN required' });
 
   const { rows: comp } = await query(
-    `SELECT co.*, ch.reward_title, ch.points_value FROM completions co
+    `SELECT co.*, ch.reward_title, ch.points_value, b.name as business_name,
+            u.email as user_email, u.full_name as user_name
+     FROM completions co
      JOIN challenges ch ON ch.id = co.challenge_id
+     JOIN businesses b ON b.id = co.business_id
+     JOIN users u ON u.id = co.user_id
      WHERE co.id = $1`,
     [id]
   );
@@ -125,6 +130,19 @@ const confirmCompletion = async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    try {
+      await sendRewardConfirmedEmail(
+        comp[0].user_email,
+        comp[0].user_name,
+        comp[0].business_name,
+        comp[0].reward_title,
+        comp[0].points_value || 0
+      )
+    } catch (emailErr) {
+      console.error('Reward email failed:', emailErr.message)
+    }
+
     res.json({ success: true, pointsAwarded: comp[0].points_value });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -136,17 +154,27 @@ const confirmCompletion = async (req, res) => {
 
 const rejectCompletion = async (req, res) => {
   const { id } = req.params;
-  const { notes } = req.body;
+  const { notes, pin } = req.body;
 
   const { rows: comp } = await query('SELECT * FROM completions WHERE id = $1', [id]);
   if (!comp.length) return res.status(404).json({ error: 'Completion not found' });
   if (comp[0].status !== 'pending') return res.status(400).json({ error: 'Completion is not pending' });
 
-  const { rows: owned } = await query(
-    'SELECT id FROM businesses WHERE id = $1 AND owner_id = $2',
-    [comp[0].business_id, req.user.id]
-  );
-  if (!owned.length) return res.status(403).json({ error: 'Forbidden' });
+  if (pin) {
+    const { rows: staff } = await query(
+      'SELECT id FROM staff WHERE business_id = $1 AND pin_code = $2 AND is_active = true',
+      [comp[0].business_id, pin]
+    );
+    if (!staff.length) return res.status(401).json({ error: 'Invalid PIN' });
+  } else if (req.user) {
+    const { rows: owned } = await query(
+      'SELECT id FROM businesses WHERE id = $1 AND owner_id = $2',
+      [comp[0].business_id, req.user.id]
+    );
+    if (!owned.length) return res.status(403).json({ error: 'Forbidden' });
+  } else {
+    return res.status(401).json({ error: 'PIN or owner auth required' });
+  }
 
   await query(
     `UPDATE completions SET status = 'rejected', notes = $1 WHERE id = $2`,
