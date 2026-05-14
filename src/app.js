@@ -31,6 +31,7 @@ app.use('/api/rewards', require('./routes/rewards'));
 app.use('/api/staff', require('./routes/staff'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/referrals', require('./routes/referrals'));
+app.use('/api/templates', require('./routes/templates'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

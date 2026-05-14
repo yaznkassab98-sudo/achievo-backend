@@ -4,6 +4,7 @@ const {
   getStats, getRecentActivity, getBusinesses, toggleBusiness,
   getUsers, verifyUser, getCities, createCity, updateCity, toggleCity, getDailyChart,
 } = require('../controllers/adminController');
+const { getTemplates, createTemplate, updateTemplate, deleteTemplate, toggleTemplate } = require('../controllers/templateController');
 
 const guard = [authenticate, requireRole('admin')];
 
@@ -18,5 +19,11 @@ router.get('/cities',             ...guard, getCities);
 router.post('/cities',            ...guard, createCity);
 router.put('/cities/:id',         ...guard, updateCity);
 router.put('/cities/:id/toggle',  ...guard, toggleCity);
+
+router.get('/templates',              ...guard, getTemplates);
+router.post('/templates',             ...guard, createTemplate);
+router.put('/templates/:id',          ...guard, updateTemplate);
+router.delete('/templates/:id',       ...guard, deleteTemplate);
+router.put('/templates/:id/toggle',   ...guard, toggleTemplate);
 
 module.exports = router;
