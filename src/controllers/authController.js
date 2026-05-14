@@ -199,4 +199,62 @@ const updateProfile = async (req, res) => {
   res.json(rows[0])
 }
 
-module.exports = { signup, verifyOtp, resendOtp, login, refresh, me, updateProfile }
+const forgotPassword = async (req, res) => {
+  const { email } = req.body
+  if (!email) return res.status(400).json({ error: 'email is required' })
+
+  const { rows } = await query(
+    'SELECT id, email, full_name FROM users WHERE email = $1 AND is_verified = true',
+    [email.toLowerCase()]
+  )
+
+  if (!rows.length) return res.json({ message: 'If that email exists, a reset code has been sent' })
+
+  const user = rows[0]
+  const { rows: recent } = await query(
+    `SELECT id FROM email_verifications WHERE user_id = $1 AND created_at > NOW() - INTERVAL '60 seconds'`,
+    [user.id]
+  )
+  if (recent.length) return res.status(429).json({ error: 'Please wait before requesting a new code' })
+
+  const code = generateOtp()
+  await query(
+    `INSERT INTO email_verifications (id, user_id, code, expires_at)
+     VALUES ($1, $2, $3, NOW() + INTERVAL '15 minutes')`,
+    [uuidv4(), user.id, code]
+  )
+
+  try {
+    await sendVerificationEmail(user.email, user.full_name, code)
+  } catch (err) {
+    console.error('Email send failed:', err.message)
+  }
+
+  res.json({ userId: user.id })
+}
+
+const resetPassword = async (req, res) => {
+  const { userId, code, newPassword } = req.body
+  if (!userId || !code || !newPassword)
+    return res.status(400).json({ error: 'userId, code, and newPassword are required' })
+
+  if (newPassword.length < 8)
+    return res.status(400).json({ error: 'Password must be at least 8 characters' })
+
+  const { rows } = await query(
+    `SELECT id FROM email_verifications
+     WHERE user_id = $1 AND code = $2 AND used = false AND expires_at > NOW()
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId, code.trim()]
+  )
+
+  if (!rows.length) return res.status(400).json({ error: 'Invalid or expired reset code' })
+
+  await query('UPDATE email_verifications SET used = true WHERE id = $1', [rows[0].id])
+  const passwordHash = await bcrypt.hash(newPassword, 12)
+  await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId])
+
+  res.json({ message: 'Password reset successfully' })
+}
+
+module.exports = { signup, verifyOtp, resendOtp, login, refresh, me, updateProfile, forgotPassword, resetPassword }
