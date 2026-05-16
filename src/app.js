@@ -6,7 +6,21 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 
 app.set('trust proxy', 1);
-app.use(helmet());
+
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      scriptSrc: ["'self'"],
+      connectSrc: ["'self'", 'https:'],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+    },
+  },
+}));
 
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',').map(url => url.trim());
 
@@ -16,19 +30,30 @@ app.use(cors({
 }));
 
 app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
-app.use(limiter);
+const makeLimit = (windowMinutes, max, message) => rateLimit({
+  windowMs: windowMinutes * 60 * 1000,
+  max,
+  message: { error: message },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const globalLimiter      = makeLimit(15, 200, 'Too many requests, please slow down.');
+const authLimiter        = makeLimit(15, 15,  'Too many login attempts, try again in 15 minutes.');
+const completionLimiter  = makeLimit(60, 10,  'Too many challenge submissions, try again later.');
+const strictLimiter      = makeLimit(60, 30,  'Too many requests to this endpoint.');
+
+app.use(globalLimiter);
 
 app.use('/api/auth', authLimiter, require('./routes/auth'));
 app.use('/api/cities', require('./routes/cities'));
 app.use('/api/businesses', require('./routes/businesses'));
-app.use('/api/challenges', require('./routes/challenges'));
-app.use('/api/completions', require('./routes/completions'));
+app.use('/api/challenges', strictLimiter, require('./routes/challenges'));
+app.use('/api/completions', completionLimiter, require('./routes/completions'));
 app.use('/api/rewards', require('./routes/rewards'));
-app.use('/api/staff', require('./routes/staff'));
+app.use('/api/staff', strictLimiter, require('./routes/staff'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/referrals', require('./routes/referrals'));
 app.use('/api/templates', require('./routes/templates'));
